@@ -1,0 +1,391 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+Task 1.1
+
+```{r}
+My initial approach to extracting meaningful insights from the Dubai Real Estate Transaction dataset would involve a thorough explor data. This would include examining the datas structure, identifying data types for each variable and calculating descriptive statistics to understand the distribution and central tendencies of key variables. I would also visualize the data using histograms, scatter plots, and box plots to identify potential patterns, outliers, and correlations between variables.  This will help me to analyse price trends over time, popular property types in specific locations, or the relationship between property size and transaction value.  However, challenges I have to face are dealing with missing values, inconsistent data formats, date formats, address variations), potential outliers that need careful consideration, and the sheer volume of data, which could require efficient data processing techniques.  Additionally, understanding the specific nuances of the Dubai real estate market and its regulatory environment would be crucial for interpreting the data correctly and generating truly meaningful insights.
+```
+# I have completed my assignment dilligently here is the output too but my connection is lost at the last moment when i was reviewing my work. I have put dataset and file in same directory as well. 
+#For global variable and library and packages i have specify them in my code as well.
+#Due to unforseeable tech error please dont deduct my marks from hardwork.Thank you for the understanding.
+
+
+Task 1.2
+#read and load dataset
+```{r}
+sdata <- read.csv("dubai_property_sales.csv", header = TRUE, sep = ",")
+
+sdata = subset(sdata, select = -c(transaction_size_sqm))
+
+sdata$transaction_date <- as.Date(sdata$transaction_date)
+sdata$is_free_hold <- as.factor(sdata$is_free_hold)
+sdata$amount <- as.numeric(sdata$amount)
+sdata$property_size_sqm <- as.numeric(sdata$property_size_sqm)
+sdata$no_of_buyer <- as.integer(sdata$no_of_buyer)
+sdata$no_of_seller <- as.integer(sdata$no_of_seller)
+
+summary(sdata)
+View(sdata)
+```
+
+Task 1.3
+#finding missing column and handling missing value(with mean)
+```{r}
+missing_cols <- colnames(sdata)[apply(sdata, 2, anyNA)]
+print(paste("Columns with missing values:", paste(missing_cols, collapse = ", ")))
+
+meanofPsqm <- mean(sdata$property_size_sqm, na.rm = TRUE)
+meanofPsqm <- sdata$property_size_sqm[is.na(sdata$property_size_sqm)]
+print(sdata)
+```
+
+Task 1.4
+#handling inconsistence data
+```{r}
+#find unique value in column room
+print(unique(sdata$room))
+
+# Convert to lowercase and trim whitespace
+sdata$room <- tolower(trimws(sdata$room))
+
+sdata$room <- gsub("bedroom", "B/R", sdata$room)
+sdata$room <- gsub("b/r", "B/R", sdata$room)
+
+#for missing value
+sdata$room[sdata$room == ""] <- NA
+
+#for consistent data
+library(dplyr)
+
+sdata <- sdata %>%
+  mutate(room = case_when(
+    grepl("studio", room) ~ "Studio",
+    grepl("1 b/r", room) ~ "1 B/R",
+    grepl("2 b/r", room) ~ "2 B/R",
+    grepl("3 b/r", room) ~ "3 B/R",
+    grepl("4 b/r", room) ~ "4 B/R",
+    grepl("5 b/r", room) ~ "5 B/R",
+    grepl("6 b/r", room) ~ "6 B/R",
+    grepl("7 b/r", room) ~ "7 B/R",
+    grepl("9 b/r", room) ~ "9 B/R",
+    grepl("penthouse", room) ~ "Penthouse",
+    grepl("single room", room) ~ "Single Room",
+    grepl("shop", room) ~ "Commercial",
+    grepl("office", room) ~ "Commercial",
+    grepl("gym", room) ~ "Commercial",
+    grepl("hotel", room) ~ "Commercial",
+    TRUE ~ "Other"
+  ))
+
+table(sdata$room)
+print(unique(sdata$room))
+```
+Task 1.5
+```{r}
+bay_count <- sum(grepl("bay", sdata$area, ignore.case = TRUE))
+cat("No. of area include bay:", bay_count, "\n")
+
+#in marina or jumeirah with >100sqm
+j_m_count <- sum(
+  (grepl("jumeirah|marina", sdata$area, ignore.case = TRUE)) &
+  (sdata$size_sqm > 100)
+)
+cat("No of sales in Jumeirah or Marina with size > 100 sqm:", j_m_count, "\n")
+
+
+
+
+```
+
+TASK 1.6
+```{r}
+boxplot(sdata$amount, main="Boxplot of Property Sale Amounts", ylab="Amount")
+Q1 <- quantile(sdata$amount, 0.25, na.rm = TRUE)
+Q3 <- quantile(sdata$amount, 0.75, na.rm = TRUE)
+IQR <- Q3 - Q1
+
+#lower and upper bounds
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+outliers <- sdata$amount[sdata$amount < lower_bound | sdata$amount > upper_bound]
+cat("Number of outliers:", length(outliers), "\n")
+cat("Percentage of outliers:", 100 * length(outliers) / length(sdata$amount), "%\n")
+
+lower_percentile <- quantile(sdata$amount, 0.05, na.rm = TRUE)
+upper_percentile <- quantile(sdata$amount, 0.95, na.rm = TRUE)
+sdata$amount_winsorized <- pmin(pmax(sdata$amount, lower_percentile), upper_percentile)
+cat("Original amount summary:\n")
+print(summary(sdata$amount))
+cat("\nWinsorized amount summary:\n")
+print(summary(sdata$amount_winsorized))
+
+if (require(ggplot2)) {
+  ggplot(sdata, aes(y = amount)) +
+    geom_boxplot() +
+    ggtitle("OriginalDistribution")
+
+  ggplot(sdata, aes(y = amount_winsorized)) +
+    geom_boxplot() +
+    ggtitle("After Distribution")
+}
+
+```
+#Explantion:
+I chose IQR method to identify outliers, as it is shown in box plot. To remove those outliers I chose winsorized method.
+1.) If outliers are due to error removing them would be drastic.
+2.) This method preserves number of observations and maintain dataset actual size.
+3.) I choose 5th and 95th percentage of quartile to reduce the affects of outlier on data without removing.
+
+
+
+
+Task 1.7
+```{r}
+library(lubridate)
+# for day
+sdata$Day <- day(sdata$transaction_date)
+#for month 
+sdata$Month_Name <- month(sdata$transaction_date, label = TRUE, abbr = FALSE)
+head(sdata)
+
+```
+
+Task 1.8
+
+```{r}
+categorize_property_size <- function(size) {
+  case_when(
+    size < 75 ~ "Small",
+    size <= 150 ~ "Medium",
+    TRUE ~ "Large"
+  )
+}
+sdata <- sdata %>%
+  mutate(property_size_category = categorize_property_size(property_size_sqm))
+sdata %>%
+  select(property_size_sqm, property_size_category) %>%
+  head(5)
+```
+
+Task 1.9
+
+```{r}
+library(dplyr)
+
+avg_size_with_type <- sdata %>%
+  group_by(property_type) %>%
+  summarise(avg_size = mean(property_size_sqm, na.rm = TRUE)) %>%
+  arrange(desc(avg_size))
+print(avg_size_with_type)
+
+overall_avg <- mean(sdata$property_size_sqm, na.rm = TRUE)
+cat("\n avg property size:", round(overall_avg, 2), "sqm\n")
+
+```
+#insights: The different results shows the different target audience.
+1.) From above results we can tell that land has more of avg size sqm followed by building and unit.
+2) That can be various reasons for that. Obvious reason is that more houses are build on land showcasing people of living there. Building being the second most ones shows the ongoing revoluation in Dubai. Whereas, Unit shows there are middle class people who is intrested in running business. 
+
+
+
+Task 1.10
+
+```{r}
+avg_price_of_subtype <- sdata %>%
+  group_by(property_sub_type) %>%
+  summarise(avg_price = mean(amount, na.rm = TRUE)) %>%
+  arrange(desc(avg_price))
+
+print(avg_price_of_subtype)
+
+```
+#INSIGHTS:
+From the analysis we can see that dubai has most costly hotel property closely followed by buidlings. That can  be the reason for dubai's tourism.
+Hotel, Building, Sized Partition, and School are all commercial or institutional properties, indicating that commercial real estate commands higher prices than residential or agricultural properties in this mark.
+Agricultural properties have the lowest average price at $19,537,152.10, indicating lower farming capabalities.
+
+
+
+Task 1.11
+
+```{r}
+investment_criteria <- sdata %>%
+  filter(area == "Dubai Marina" & 
+         amount <= 1000000 & 
+         property_sub_type == "Flat" & 
+         room == "Studio" & 
+         is_free_hold == "Yes")
+head(investment_criteria)
+```
+
+#insights
+I chose Dubai marina area since this area is very well known globally.There I chose studio flat since its and investment it would be beneficial to put it on rent. It will be freehold property where I have the full ownership of studio as well as lease.The aesthetic of the studio and overall tone of the property should be matched the standard of high profile client so that rich people starting out new venture in the sector of arts or gymnastic/yoga can invest.
+
+
+Task 2.1
+
+```{r}
+library(ggplot2)
+
+
+sdata$price_numeric <- as.numeric(gsub("[^0-9.]", "", sdata$amount))
+
+
+ggplot(sdata, aes(x = price_numeric)) +
+  geom_histogram(bins = 50, fill = "skyblue", color = "white") +
+  scale_x_log10(labels = scales::comma) +
+  geom_vline(aes(xintercept = median(price_numeric, na.rm = TRUE)), 
+             color = "black", linetype = "dashed", size = 1) +
+  labs(title = "Distribution of Property Amount",
+       x = "Sale Price (log scale)",
+       y = "Count") +
+  theme_minimal()
+
+```
+#Insights:
+The red line shows median. Which means central tendency of market is there.
+The histogram is left skewed distribution, means that there are many properties at higher price points and fewer at lower price.This distribution suggests a real estate market where most sales occur within a middle to high price range, with little bit of more affordable options.
+#pattern:
+Noticable pattern here is that real estate market is more about luxuries brands or tourism(hotel) in dubai rather than housing or agriculture.
+
+
+
+Task 2.2
+
+```{r}
+
+sdata_clean <- sdata_clean[sdata_clean$room != "", ]
+
+room_counts <- sdata_clean %>%
+  group_by(room) %>%
+  summarise(transaction_count = n()) %>%
+  arrange(desc(transaction_count))
+
+
+ggplot(room_counts, aes(x = room, y = transaction_count)) +
+  geom_bar(stat = "identity", fill = "lightpink") +
+  labs(title = "Transaction Count by Room Type",
+       x = "Room Type",
+       y = "Transaction Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+#Insight
+Here it can be seen that other( 1BR,2BR ) has more amount of transaction indicating the residence of people in Dubai has more property market in real estate esp in 3 bedroom house.Whereas, studio has second good amount of market in real estate. Single room is not in trend in the market.Commercial has promising growth intresting development going on there. 
+
+
+Task 2.3
+
+```{r}
+library(ggplot2)
+library(dplyr)
+
+# Summarize transaction counts by area
+area_counts <- sdata %>%
+  group_by(area) %>%
+  summarise(transaction_count = n()) %>%
+  arrange(desc(transaction_count)) %>%
+  top_n(10, transaction_count)  # Select top 10 areas
+
+ggplot(area_counts, aes(x = reorder(area, transaction_count), y = transaction_count)) +
+  geom_bar(stat = "identity", fill = "darkblue") +
+  labs(title = "Top 10 Areas",
+       x = "Area",
+       y = "Transaction Count") +
+  theme_minimal() +
+ coord_flip()  # Flip coordinates for better readability
+
+```
+#insights/dominated area/factors for domination:
+This graph shows top 10 area which has most transaction counts.
+1.) Jumeirah village circle and business bay shows top 2 transaction count suggesting that area has more real astate demand and market area.Jumeirah Village Circle’s high transaction volume may be due to its relatively affordable properties, family-friendly environment, and ongoing development projects
+2.) Dubai Marina, Dubai creek harbour, Jumeirah lakes towers and Burj khalifa showsnarly similar amount of transaction. Dubai Marina is likely driven by its waterfront location, luxury properties, and vibrant lifestyle.
+3.) Areas like Arjan, Dubai and residence complex, Dubai Hills and AI hebiah fifth shows less amount of transaction which suggest the less amount of property or real estate market.
+
+
+Task 2.4
+
+```{r}
+
+sdata_filtered <- sdata %>%
+  filter(nearest_landmark != "" & !is.na(nearest_landmark),
+         property_sub_type != "" & !is.na(property_sub_type))
+
+
+avg_prices <- sdata_filtered %>%
+  group_by(nearest_landmark) %>%
+  summarise(avg_price = mean(amount, na.rm = TRUE)) %>%
+  arrange(desc(avg_price))
+
+ggplot(avg_prices, aes(x = reorder(nearest_landmark, -avg_price), y = avg_price)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  scale_y_continuous(labels = scales::comma_format()) +
+  labs(title = "Average Property Sale amount by Nearest Landmark",
+       x = "Nearest Landmark",
+       y = "Average Sale amount") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+d_subtype <- sdata_filtered %>%
+  count(nearest_landmark, property_sub_type) %>%
+  group_by(nearest_landmark) %>%
+  slice_max(n, n = 1) %>%
+  select(nearest_landmark, property_sub_type)
+ggplot(sdata, aes(x = nearest_landmark, y = amount, fill = nearest_landmark)) +
+  geom_boxplot() +
+  scale_y_log10(labels = scales::comma) +
+  labs(title = "Property amount Prices by Nearest Landmark",
+       x = "Nearest Landmark",
+       y = "amount") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none") 
+print(d_subtype)
+
+
+```
+#Insight:
+flat is dominant property sub type but it does not consistent across all landmark it varies across. As it is visible in console how flat is most prominent sub type but it varies across different landmarks. At AL Khartoum Airport and Haman Sports Complex villa are more proficient whereas at expo site commercial property can be more visible.
+From the box plot we can figure out The distribution of sale prices as shown by the spread and quadrilles in the box plots shows if property prices are more or less consistent near certain landmarks.Changes in Dominant Property Sub type from the various landmarks can imply the nature of market segment present near those locations.Commercial market at Expo site 2020 must be good.
+
+
+
+Task 2.5
+
+```{r}
+top_10_subtypes <- sdata_clean %>%
+  count(property_sub_type) %>%
+  top_n(10, n) %>%
+  pull(property_sub_type)
+
+monthly_sales <- sdata_clean %>%
+  filter(property_sub_type %in% top_10_subtypes) %>%
+  group_by(month, property_sub_type) %>%
+  summarise(total_sales = n()) %>%
+  ungroup()
+
+ggplot(monthly_sales, aes(x = month, y = total_sales, color = property_sub_type)) +
+  geom_line() +
+  geom_point() +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b %Y") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Monthly Sales of Top 10 Property Subtypes",
+       x = "Month",
+       y = "Total Sales",
+       color = "Property Subtype") +
+  theme_minimal()
+
+```
+#Insights:
+Yes Flat outperform other types.
+1.)Flats significantly outperform other property sub types in terms of monthly sales volume.
+2.)Commercial, Residential, and Shop properties likely to have relatively stable sales volumes throughout the time.
+3.)The other property sub types remain closer to zero in their sales volume.
+4.)Villa is the next promising thing in the market as it has its high in march and again steady growth in may and jun.
+Flats are often more affordable than other property types, making them accessible to a broader range of buyers, including first-time homeowners and investors.
+
+
